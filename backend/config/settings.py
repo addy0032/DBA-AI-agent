@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     WAIT_SPIKE_MULTIPLIER: float = 2.0
     QUERY_REGRESSION_MULTIPLIER: float = 1.5
 
+    # Phase 5: Tiered Polling (Enterprise Redesign)
+    FAST_POLL_SECONDS: int = 5
+    MEDIUM_POLL_SECONDS: int = 30
+    SLOW_POLL_SECONDS: int = 300
+
     # Phase 4: Z-Score & Delta Modeling
     CPU_ZSCORE_THRESHOLD: float = 2.0
     QUERY_REGRESSION_STD_MULTIPLIER: float = 3.0

@@ -2,8 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config.settings import settings
-from api.routes import router
+from api.routes import router as legacy_router
 from api import chat_routes
+from api.server_routes import router as observability_router
+from metrics_engine.engine import metrics_engine
 from data_collection.poller import collector
 from utils.logger import setup_logger
 
@@ -12,17 +14,19 @@ logger = setup_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Starting SQL DBA AI Agent API...")
-    collector.start()
+    logger.info("Starting Enterprise SQL DBA Observability Platform...")
+    metrics_engine.start()  # New tiered polling engine
+    collector.start()       # Keep legacy poller for backward compat (anomaly detection)
     yield
     # Shutdown
-    logger.info("Shutting down SQL DBA AI Agent API...")
+    logger.info("Shutting down platform...")
+    metrics_engine.stop()
     collector.stop()
 
 app = FastAPI(
-    title="SQL Server DBA AI Agent",
-    description="Real-Time AI-Powered DBA monitoring and anomaly resolution.",
-    version="1.0.0",
+    title="SQL Server DBA Observability Platform",
+    description="Enterprise-grade SQL Server monitoring, observability, and AI analysis.",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -36,5 +40,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router, tags=["DBA Agent"])
-app.include_router(chat_routes.router, prefix="/chat", tags=["Chat"]) # Added this line
+# New observability endpoints
+app.include_router(observability_router, tags=["Observability"])
+
+# Legacy endpoints (anomalies, recommendations, triggers)
+app.include_router(legacy_router, tags=["Legacy Agent"])
+
+# Chat agent
+app.include_router(chat_routes.router, prefix="/chat", tags=["Chat"])
