@@ -1,184 +1,169 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { format } from "date-fns";
-import { Database, Play, RefreshCw, Activity, CheckCircle2, XCircle } from "lucide-react";
-import { MetricSnapshot, Anomaly, Recommendation, HealthCheck } from "@/types";
+import { useEffect, useState, useCallback } from "react";
+import { observabilityApi } from "@/services/observabilityApi";
 import { dbaApi } from "@/services/api";
-
-import { MetricCardsRow } from "../components/metrics/MetricCardsRow";
-import { LiveMetricsPanel } from "../components/charts/LiveMetricsPanel";
-import { AnomalyPanel } from "../components/anomalies/AnomalyPanel";
-import { RecommendationPanel } from "../components/recommendations/RecommendationPanel";
-import { RecommendationHistory } from "../components/recommendations/RecommendationHistory";
-import { FullPageLoader, Loader } from "../components/shared/Loader";
+import { HealthCheck } from "@/types";
+import { Database, Cpu, MemoryStick, Clock, Workflow, HardDrive, Table2, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import { format } from "date-fns";
+import ReactECharts from "echarts-for-react";
 
 export default function DashboardPage() {
-    const [isInitializing, setIsInitializing] = useState(true);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-
-    // Data State
     const [health, setHealth] = useState<HealthCheck | null>(null);
-    const [currentMetrics, setCurrentMetrics] = useState<MetricSnapshot | null>(null);
-    const [previousMetrics, setPreviousMetrics] = useState<MetricSnapshot | null>(null);
-    const [history, setHistory] = useState<MetricSnapshot[]>([]);
-    const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+    const [cpu, setCpu] = useState<any>(null);
+    const [memory, setMemory] = useState<any>(null);
+    const [sessions, setSessions] = useState<any>(null);
+    const [waits, setWaits] = useState<any>(null);
+    const [cpuHistory, setCpuHistory] = useState<any[]>([]);
+    const [waitHistory, setWaitHistory] = useState<any[]>([]);
+    const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+    const [blocking, setBlocking] = useState<any>(null);
 
-    // Rec State
-    const [activeRecommendation, setActiveRecommendation] = useState<Recommendation | null>(null);
-    const [recHistory, setRecHistory] = useState<Recommendation[]>([]);
-
-    // Refs for tracking changes
-    const lastMetricsRef = useRef<MetricSnapshot | null>(null);
-
-    const fetchMetricsAndAnomalies = useCallback(async () => {
+    const pollFast = useCallback(async () => {
         try {
-            const [_health, _current, _history, _anomalies] = await Promise.all([
+            const [h, c, s, w, b] = await Promise.all([
                 dbaApi.getHealth(),
-                dbaApi.getMetricsCurrent(),
-                dbaApi.getMetricsHistory(20),
-                dbaApi.getAnomalies()
+                observabilityApi.getCpu(),
+                observabilityApi.getSessions(),
+                observabilityApi.getWaits(),
+                observabilityApi.getBlocking(),
             ]);
-
-            setHealth(_health);
-
-            if (lastMetricsRef.current !== null && lastMetricsRef.current.timestamp !== _current.timestamp) {
-                setPreviousMetrics(lastMetricsRef.current);
-            }
-
-            setCurrentMetrics(_current);
-            lastMetricsRef.current = _current;
-
-            setHistory(_history);
-            setAnomalies(_anomalies);
+            setHealth(h);
+            setCpu(c.current);
+            setCpuHistory(c.history || []);
+            setSessions(s.current);
+            setWaits(w.current);
+            setWaitHistory(w.history || []);
+            setBlocking(b.current);
             setLastRefresh(new Date());
-        } catch (e) {
-            console.error("Polling error", e);
-        }
+        } catch (e) { console.error(e); }
     }, []);
 
-    const loadRecommendations = useCallback(async () => {
+    const [mem, setMem] = useState<any>(null);
+    const pollMedium = useCallback(async () => {
         try {
-            const [_latest, _history] = await Promise.all([
-                dbaApi.getLatestRecommendation(),
-                dbaApi.getRecommendationHistory(50)
-            ]);
-            setActiveRecommendation(_latest);
-            setRecHistory(_history);
-        } catch (e) {
-            console.error("Rec load error", e);
-        }
+            const m = await observabilityApi.getMemory();
+            setMemory(m.current);
+        } catch (e) { console.error(e); }
     }, []);
 
-    // Initial load
     useEffect(() => {
-        Promise.all([fetchMetricsAndAnomalies(), loadRecommendations()]).finally(() => {
-            setIsInitializing(false);
-        });
-    }, [fetchMetricsAndAnomalies, loadRecommendations]);
+        pollFast();
+        pollMedium();
+        const fast = setInterval(pollFast, 5000);
+        const med = setInterval(pollMedium, 30000);
+        return () => { clearInterval(fast); clearInterval(med); };
+    }, [pollFast, pollMedium]);
 
-    // Polling Interval
-    useEffect(() => {
-        const intervalId = setInterval(fetchMetricsAndAnomalies, 5000);
-        return () => clearInterval(intervalId);
-    }, [fetchMetricsAndAnomalies]);
+    const cpuPct = cpu?.sql_cpu_percent ?? 0;
+    const isHealthy = health?.status === "ok";
 
-    const handleTriggerAnalysis = async () => {
-        if (isAnalyzing) return;
-        setIsAnalyzing(true);
-        try {
-            await dbaApi.triggerAnalysis();
-            await loadRecommendations(); // Refresh exactly once after triggering
-            await fetchMetricsAndAnomalies(); // force latest state sync
-        } catch (e) {
-            alert("Failed to trigger analysis.");
-            console.error(e);
-        } finally {
-            setIsAnalyzing(false);
-        }
+    // CPU history sparkline
+    const cpuSparkline = {
+        backgroundColor: "transparent",
+        grid: { top: 5, right: 5, bottom: 5, left: 5 },
+        xAxis: { show: false, type: "category" as const, data: cpuHistory.map((_: any, i: number) => i) },
+        yAxis: { show: false, type: "value" as const, min: 0, max: 100 },
+        series: [{
+            type: "line" as const,
+            data: cpuHistory.map((h: any) => h.sql_cpu_percent),
+            smooth: true,
+            showSymbol: false,
+            lineStyle: { width: 2, color: cpuPct > 80 ? "#ef4444" : cpuPct > 50 ? "#f59e0b" : "#22c55e" },
+            areaStyle: { opacity: 0.15, color: cpuPct > 80 ? "#ef4444" : cpuPct > 50 ? "#f59e0b" : "#22c55e" },
+        }],
     };
 
-    if (isInitializing) {
-        return <FullPageLoader />;
-    }
-
-    const isHealthy = health?.status === "ok" && health?.poller_running;
+    // Top waits mini bar
+    const topWaits = (waits?.waits ?? []).slice(0, 5);
+    const waitBarOption = {
+        backgroundColor: "transparent",
+        grid: { top: 5, right: 10, bottom: 5, left: 100 },
+        yAxis: { type: "category" as const, data: topWaits.map((w: any) => w.wait_type), axisLabel: { color: "#999", fontSize: 9 }, axisTick: { show: false } },
+        xAxis: { show: false, type: "value" as const },
+        series: [{
+            type: "bar" as const,
+            data: topWaits.map((w: any) => w.wait_rate_ms_per_sec.toFixed(1)),
+            itemStyle: { color: "#f43f5e", borderRadius: [0, 4, 4, 0] },
+            barWidth: 14,
+        }],
+    };
 
     return (
-        <div className="flex flex-col min-h-screen">
-            {/* Header Bar */}
-            <header className="sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-black/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+        <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+            {/* Header */}
+            <header className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-zinc-950 dark:bg-white flex items-center justify-center">
-                        <Database className="h-5 w-5 text-zinc-50 dark:text-zinc-950" />
+                    <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-lg flex items-center justify-center">
+                        <Database className="w-5 h-5 text-white" />
                     </div>
-                    <h1 className="font-bold text-lg tracking-tight hidden sm:block">SQL DBA AI Agent</h1>
-
-                    <div className="ml-4 flex items-center gap-2 border-l border-zinc-200 dark:border-zinc-800 pl-4">
-                        {isHealthy ? (
-                            <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-500">
-                                <CheckCircle2 className="h-4 w-4" /> Connected
+                    <div>
+                        <h1 className="text-xl font-bold">SQL Server Overview</h1>
+                        <div className="flex items-center gap-2 text-xs mt-0.5">
+                            {isHealthy ? (
+                                <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Connected</span>
+                            ) : (
+                                <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" /> Offline</span>
+                            )}
+                            <span className="text-zinc-600">•</span>
+                            <span className="text-zinc-500 flex items-center gap-1">
+                                <RefreshCw className="w-3 h-3" />
+                                {lastRefresh ? format(lastRefresh, "HH:mm:ss") : "--:--:--"}
                             </span>
-                        ) : (
-                            <span className="flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-500">
-                                <XCircle className="h-4 w-4" /> Disconnected
-                            </span>
-                        )}
+                        </div>
                     </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <div className="hidden md:flex items-center gap-2 text-xs text-zinc-500">
-                        <RefreshCw className="h-3 w-3 animate-spin duration-3000" />
-                        Last refresh: {lastRefresh ? format(lastRefresh, "HH:mm:ss") : "--:--:--"}
-                    </div>
-                    <button
-                        onClick={handleTriggerAnalysis}
-                        disabled={isAnalyzing}
-                        className="flex items-center gap-2 bg-zinc-950 dark:bg-zinc-50 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-zinc-50 dark:text-zinc-950 transition-colors px-4 py-2 rounded-md text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isAnalyzing ? <Loader size={16} /> : <Play className="h-4 w-4 fill-current" />}
-                        {isAnalyzing ? "Analyzing..." : "Run AI Analysis"}
-                    </button>
                 </div>
             </header>
 
-            {/* Main Content */}
-            <main className="flex-1 p-6 space-y-6 max-w-[1600px] mx-auto w-full">
-                {/* System Overview */}
-                <section>
-                    <MetricCardsRow current={currentMetrics} previous={previousMetrics} />
-                </section>
+            {/* KPI Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <KPI label="SQL CPU" value={`${cpuPct}%`} color={cpuPct > 80 ? "text-red-400" : cpuPct > 50 ? "text-amber-400" : "text-emerald-400"} icon={<Cpu className="w-4 h-4" />} />
+                <KPI label="PLE" value={memory?.page_life_expectancy ?? "…"} color={memory?.page_life_expectancy < 300 ? "text-red-400" : "text-emerald-400"} icon={<MemoryStick className="w-4 h-4" />} />
+                <KPI label="Active Sessions" value={sessions?.active_sessions ?? 0} color="text-sky-400" icon={<Workflow className="w-4 h-4" />} />
+                <KPI label="Blocked" value={sessions?.blocked_sessions ?? 0} color={sessions?.blocked_sessions > 0 ? "text-red-400" : "text-emerald-400"} icon={<Workflow className="w-4 h-4" />} />
+                <KPI label="Head Blockers" value={blocking?.head_blocker_count ?? 0} color={blocking?.head_blocker_count > 0 ? "text-red-400" : "text-zinc-400"} icon={<Workflow className="w-4 h-4" />} />
+                <KPI label="Signal Wait %" value={`${(cpu?.signal_wait_pct ?? 0).toFixed(1)}%`} color={cpu?.signal_wait_pct > 15 ? "text-amber-400" : "text-zinc-400"} icon={<Clock className="w-4 h-4" />} />
+            </div>
 
-                {/* Live Visualizations */}
-                <section>
-                    <LiveMetricsPanel current={currentMetrics} history={history} />
-                </section>
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* CPU Trend */}
+                <div className="bg-[#111] border border-[#222] rounded-xl p-5">
+                    <h3 className="text-sm text-zinc-400 font-medium mb-2 flex items-center gap-2"><Cpu className="w-4 h-4 text-violet-400" /> CPU Trend</h3>
+                    {cpuHistory.length > 1 ? (
+                        <ReactECharts option={cpuSparkline} style={{ height: 120 }} opts={{ renderer: "canvas" }} />
+                    ) : (
+                        <div className="h-[120px] flex items-center justify-center text-zinc-700 text-xs">Collecting...</div>
+                    )}
+                </div>
 
-                {/* Anomalies & Recommendations */}
-                <section className="grid gap-6 lg:grid-cols-12">
-                    {/* Anomalies List */}
-                    <div className="lg:col-span-4">
-                        <AnomalyPanel anomalies={anomalies} />
-                    </div>
+                {/* Top Waits */}
+                <div className="bg-[#111] border border-[#222] rounded-xl p-5">
+                    <h3 className="text-sm text-zinc-400 font-medium mb-2 flex items-center gap-2"><Clock className="w-4 h-4 text-rose-400" /> Top Waits (ms/sec)</h3>
+                    {topWaits.length > 0 ? (
+                        <ReactECharts option={waitBarOption} style={{ height: 120 }} opts={{ renderer: "canvas" }} />
+                    ) : (
+                        <div className="h-[120px] flex items-center justify-center text-zinc-700 text-xs">Collecting...</div>
+                    )}
+                </div>
+            </div>
 
-                    {/* AI Recommendation Panel */}
-                    <div className="lg:col-span-8 flex flex-col gap-6">
-                        <div className="flex-1 min-h-[400px]">
-                            <RecommendationPanel recommendation={activeRecommendation} />
-                        </div>
+            {/* Memory Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <KPI label="Server Memory (MB)" value={(memory?.total_server_memory_mb ?? 0).toFixed(0)} color="text-violet-400" icon={<MemoryStick className="w-4 h-4" />} />
+                <KPI label="Target (MB)" value={(memory?.target_server_memory_mb ?? 0).toFixed(0)} color="text-zinc-400" icon={<MemoryStick className="w-4 h-4" />} />
+                <KPI label="Grants Pending" value={memory?.memory_grants_pending ?? 0} color={memory?.memory_grants_pending > 0 ? "text-red-400" : "text-emerald-400"} icon={<MemoryStick className="w-4 h-4" />} />
+                <KPI label="Cache Hit %" value={`${(memory?.buffer_cache_hit_ratio ?? 0).toFixed(1)}%`} color={memory?.buffer_cache_hit_ratio < 95 ? "text-amber-400" : "text-emerald-400"} icon={<MemoryStick className="w-4 h-4" />} />
+            </div>
+        </div>
+    );
+}
 
-                        {/* Recommendation History Bar */}
-                        <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-                            <RecommendationHistory
-                                history={recHistory}
-                                onSelect={(rec) => setActiveRecommendation(rec)}
-                            />
-                        </div>
-                    </div>
-                </section>
-            </main>
+function KPI({ label, value, color, icon }: { label: string; value: any; color: string; icon: React.ReactNode }) {
+    return (
+        <div className="bg-[#111] border border-[#222] rounded-xl p-4">
+            <div className="flex items-center gap-2 text-zinc-500 text-[11px] mb-2">{icon} {label}</div>
+            <p className={`text-2xl font-bold tracking-tight ${color}`}>{value}</p>
         </div>
     );
 }
