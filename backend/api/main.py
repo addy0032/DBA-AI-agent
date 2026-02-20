@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from config.settings import settings
 from api.routes import router
+from api import chat_routes
 from data_collection.poller import collector
 from utils.logger import setup_logger
 
@@ -36,3 +37,4 @@ app.add_middleware(
 )
 
 app.include_router(router, tags=["DBA Agent"])
+app.include_router(chat_routes.router, prefix="/chat", tags=["Chat"]) # Added this line

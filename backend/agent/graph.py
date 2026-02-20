@@ -82,7 +82,11 @@ def prepare_llm_prompt_node(state: AgentState) -> AgentState:
     --- Database Context Snapshot ---
     Timestamp: {state["current_snapshot"].timestamp.isoformat()}
     Active Sessions: {state["current_snapshot"].active_sessions_count}
-    Top 3 Wait Stats: {', '.join(waits_summary)}
+    Top 3 Wait Stats (CUMULATIVE VALUES): {', '.join(waits_summary)}
+    
+    IMPORTANT: The absolute Wait Time MS inside the context data often represents raw cumulative values.
+    Any anomalies tagged as HIGH_WAITS containing `delta_ms` or `rate_ms_per_sec` fields represent the true
+    active wait rate throughput delta. Always prioritize the delta metrics for diagnosis instead of cumulative totals.
     
     Please provide root cause analysis and recommendations respecting the strict JSON format.
     """

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from models.db_models import MetricSnapshot, Anomaly, SeverityLevel
 
@@ -21,3 +21,16 @@ class TriggerAnalysisResponse(BaseModel):
     message: str
     anomalies_detected: int
     recommendations: Optional[Recommendation] = None
+
+class ChatRequest(BaseModel):
+    user_message: str
+    session_id: str = "default_session"
+
+class ChatResponse(BaseModel):
+    generated_sql: Optional[str] = None
+    explanation: str
+    confidence: float = 0.0
+    execution_time_ms: float = 0.0
+    query_results_preview: List[Dict[str, Any]] = []
+    error_message: Optional[str] = None
+    suggested_chart_type: Optional[str] = None
