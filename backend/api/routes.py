@@ -27,7 +27,9 @@ async def get_active_anomalies():
     if not snapshot:
         return []
     from anomaly_detection.detector import detector
-    return detector.detect(snapshot)
+    from config.settings import settings
+    history = snapshot_manager.get_history(settings.BASELINE_WINDOW_SIZE)
+    return detector.detect(snapshot, history)
 
 @router.get("/recommendations", response_model=Optional[Recommendation])
 async def get_latest_recommendation():

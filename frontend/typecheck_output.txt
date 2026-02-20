@@ -1,0 +1,6 @@
+
+> frontend@0.1.0 typecheck C:\Data\Winnovation Intern Projects\sql-dba-ai-agent\frontend
+> tsc --noEmit
+
+app/components/charts/LineChart.tsx(6,26): error TS2307: Cannot find module 'next-themes' or its corresponding type declarations.
+ΓÇëELIFECYCLEΓÇë Command failed with exit code 1.

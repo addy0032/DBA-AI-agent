@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from models.db_models import MetricSnapshot, Anomaly, SeverityLevel
 
 class RecommendationAction(BaseModel):
@@ -13,8 +13,8 @@ class Recommendation(BaseModel):
     technical_diagnosis: str
     recommended_actions: List[RecommendationAction]
     risk_level: str
-    confidence_score: float
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    confidence_score: float = 0.0
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TriggerAnalysisResponse(BaseModel):
     status: str

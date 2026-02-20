@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 class SeverityLevel(str, Enum):
@@ -23,7 +23,7 @@ class Anomaly(BaseModel):
     severity: SeverityLevel
     root_resource: str
     context_data: Dict[str, Any]
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class BlockingSession(BaseModel):
     session_id: int
@@ -77,7 +77,7 @@ class MissingIndex(BaseModel):
     avg_user_impact: float
 
 class MetricSnapshot(BaseModel):
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     active_sessions_count: int
     blocking_chains: List[BlockingSession] = []
     top_wait_stats: List[WaitStatSummary] = []

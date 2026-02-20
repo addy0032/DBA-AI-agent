@@ -15,9 +15,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.6",
+    "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",

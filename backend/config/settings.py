@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # Database
-    SQL_SERVER: str = "localhost"
+    SQL_SERVER: str = r"ADDY\SQLEXPRESS"
     SQL_DATABASE: str = "AdventureWorks2025"
     SQL_USER: str = ""
     SQL_PASSWORD: str = ""
