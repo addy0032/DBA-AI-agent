@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     WAIT_RATE_THRESHOLD_PER_SEC: float = 100.0  # ms/sec threshold
     WAIT_DOMINANCE_PERCENT_THRESHOLD: float = 50.0 # 50%
     WAIT_SUSTAINED_INTERVALS: int = 3
+
+    # Phase 6: Parameter Sniffing & Prediction
+    PARAM_SNIFFING_VARIANCE_RATIO: float = 3.0     # max/min avg duration ratio
+    PARAM_SNIFFING_MIN_STDDEV: float = 100.0        # μs — low for dev, raise for prod
+    PREDICTION_SLOPE_THRESHOLD: float = 5000.0      # μs per sample — triggers alert
+    PREDICTION_MIN_HISTORY_POINTS: int = 5
     
     # Phase 4: Chat Agent System
     CHAT_MAX_CONTEXT_LENGTH: int = 16000

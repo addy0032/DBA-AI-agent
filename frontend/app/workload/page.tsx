@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { observabilityApi } from "@/services/observabilityApi";
-import { Workflow, AlertTriangle, Search } from "lucide-react";
+import { Workflow, AlertTriangle, Search, X, Copy, CheckCheck } from "lucide-react";
 
 export default function WorkloadPage() {
     const [sessions, setSessions] = useState<any>(null);
     const [blocking, setBlocking] = useState<any>(null);
     const [queries, setQueries] = useState<any>(null);
+    const [selectedSql, setSelectedSql] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         const poll = async () => {
@@ -26,6 +28,16 @@ export default function WorkloadPage() {
         const id = setInterval(poll, 5000);
         return () => clearInterval(id);
     }, []);
+
+    const openSql = (sql: string) => { setSelectedSql(sql); setCopied(false); };
+    const closeSql = () => setSelectedSql(null);
+    const copySql = async () => {
+        if (selectedSql) {
+            await navigator.clipboard.writeText(selectedSql);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        }
+    };
 
     return (
         <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -70,7 +82,15 @@ export default function WorkloadPage() {
                                         <td className="py-2 px-3 text-amber-400">{b.wait_type}</td>
                                         <td className="py-2 px-3 text-zinc-300">{b.wait_time_ms.toLocaleString()}</td>
                                         <td className="py-2 px-3 text-zinc-400">{b.command}</td>
-                                        <td className="py-2 px-3 text-zinc-500 max-w-[300px] truncate">{b.sql_text}</td>
+                                        <td className="py-2 px-3 max-w-[300px]">
+                                            <button
+                                                onClick={() => openSql(b.sql_text || "N/A")}
+                                                className="text-left text-zinc-500 hover:text-cyan-400 truncate block max-w-[300px] transition-colors cursor-pointer"
+                                                title="Click to view full SQL"
+                                            >
+                                                {b.sql_text || "—"}
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -107,7 +127,15 @@ export default function WorkloadPage() {
                                         <td className="py-2 px-3 text-right text-amber-300">{q.total_worker_time.toLocaleString()}</td>
                                         <td className="py-2 px-3 text-right text-zinc-400">{q.total_logical_reads.toLocaleString()}</td>
                                         <td className="py-2 px-3 text-zinc-500">{q.database_name}</td>
-                                        <td className="py-2 px-3 text-zinc-500 max-w-[300px] truncate">{q.sql_text}</td>
+                                        <td className="py-2 px-3 max-w-[300px]">
+                                            <button
+                                                onClick={() => openSql(q.sql_text || "N/A")}
+                                                className="text-left text-zinc-500 hover:text-cyan-400 truncate block max-w-[300px] transition-colors cursor-pointer"
+                                                title="Click to view full SQL"
+                                            >
+                                                {q.sql_text}
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -117,6 +145,34 @@ export default function WorkloadPage() {
                     <p className="text-zinc-600 text-sm">Loading query data...</p>
                 )}
             </div>
+
+            {/* SQL Modal */}
+            {selectedSql && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={closeSql}>
+                    <div className="bg-[#0d0d0d] border border-[#333] rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-[#222]">
+                            <h3 className="text-sm font-semibold text-zinc-300">Full SQL Statement</h3>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={copySql}
+                                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
+                                >
+                                    {copied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                    {copied ? "Copied!" : "Copy"}
+                                </button>
+                                <button onClick={closeSql} className="text-zinc-500 hover:text-white transition p-1">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                        {/* Body */}
+                        <div className="p-5 overflow-auto flex-1">
+                            <pre className="text-sm text-emerald-300 font-mono whitespace-pre-wrap break-words leading-relaxed">{selectedSql}</pre>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

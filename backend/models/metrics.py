@@ -153,10 +153,29 @@ class RegressedQuery(BaseModel):
     execution_count: int = 0
     plan_count: int = 0
 
+class PlanPerformance(BaseModel):
+    plan_id: int
+    avg_duration_us: float = 0.0
+    avg_cpu_time_us: float = 0.0
+    execution_count: int = 0
+
+class ParameterSniffingCandidate(BaseModel):
+    query_id: int
+    query_text: str = ""
+    plan_count: int = 0
+    plans: List[PlanPerformance] = []
+    duration_mean_us: float = 0.0
+    duration_stddev_us: float = 0.0
+    max_avg_duration_us: float = 0.0
+    min_avg_duration_us: float = 0.0
+    variance_ratio: float = 0.0
+    suspected: bool = False
+
 class QueryStoreSnapshot(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_enabled: bool = False
     regressed_queries: List[RegressedQuery] = []
+    parameter_sniffing_candidates: List[ParameterSniffingCandidate] = []
     forced_plan_count: int = 0
     total_plans_tracked: int = 0
 

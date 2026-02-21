@@ -164,6 +164,59 @@ class MetricsEngine:
         with self._lock:
             return dict(self._current)
 
+    def force_refresh_all(self) -> None:
+        """Run ALL collectors once immediately (bypasses timer intervals)."""
+        logger.info("Force refreshing all collectors...")
+        try:
+            cpu = collect_cpu()
+            sessions = collect_sessions()
+            blocking = collect_blocking()
+            waits = collect_waits()
+            queries = collect_queries()
+            memory = collect_memory()
+            io = collect_io()
+            indexes = collect_indexes()
+            qs = collect_query_store()
+            dbs = collect_databases()
+            config = collect_configuration()
+
+            with self._lock:
+                self._current["cpu"] = cpu
+                self._current["sessions"] = sessions
+                self._current["blocking"] = blocking
+                self._current["waits"] = waits
+                self._current["queries"] = queries
+                self._current["memory"] = memory
+                self._current["io"] = io
+                self._current["indexes"] = indexes
+                self._current["query_store"] = qs
+                self._current["databases"] = dbs
+                self._current["configuration"] = config
+
+                self._history["cpu"].append(cpu)
+                self._history["sessions"].append(sessions)
+                self._history["blocking"].append(blocking)
+                self._history["waits"].append(waits)
+                self._history["queries"].append(queries)
+                self._history["memory"].append(memory)
+                self._history["io"].append(io)
+                self._history["indexes"].append(indexes)
+                self._history["query_store"].append(qs)
+                self._history["databases"].append(dbs)
+                self._history["configuration"].append(config)
+
+            logger.info("Force refresh complete.")
+        except Exception as e:
+            logger.error(f"Force refresh error: {e}")
+
+    def reset_history(self) -> None:
+        """Clear all cached snapshots and history (used when switching databases)."""
+        with self._lock:
+            self._current.clear()
+            for dq in self._history.values():
+                dq.clear()
+        logger.info("MetricsEngine history cleared.")
+
 
 # Singleton
 metrics_engine = MetricsEngine()

@@ -9,6 +9,16 @@ async function fetchJson(endpoint: string) {
     return res.json();
 }
 
+async function postJson(endpoint: string, body: any = {}) {
+    const res = await fetch(`${API}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    return res.json();
+}
+
 export const observabilityApi = {
     // Server Health
     getServerHealth: () => fetchJson("/server/health"),
@@ -35,4 +45,10 @@ export const observabilityApi = {
 
     // Configuration
     getConfiguration: () => fetchJson("/configuration/audit"),
+
+    // Admin
+    getActiveDb: () => fetchJson("/admin/active-db"),
+    listDatabases: () => fetchJson("/admin/databases"),
+    switchDb: (database: string) => postJson("/admin/switch-db", { database }),
+    refreshAll: () => postJson("/admin/refresh-all"),
 };

@@ -184,6 +184,79 @@ class AnomalyDetector:
                     context_data=ix.model_dump()
                 ))
 
+        # 6. Parameter Sniffing Detection (from MetricsEngine QS snapshot)
+        try:
+            from metrics_engine.engine import metrics_engine
+            qs_snapshot = metrics_engine.get_current("query_store")
+            if qs_snapshot and hasattr(qs_snapshot, "parameter_sniffing_candidates"):
+                for candidate in qs_snapshot.parameter_sniffing_candidates:
+                    if candidate.suspected:
+                        # Severity scales with variance ratio
+                        if candidate.variance_ratio > 10:
+                            severity_weight = 9  # CRITICAL
+                        elif candidate.variance_ratio > 5:
+                            severity_weight = 5  # WARNING
+                        else:
+                            severity_weight = 3  # INFO
+
+                        context = candidate.model_dump()
+                        context["anomaly_score"] = severity_weight
+                        context["detection_method"] = "plan_variance_analysis"
+
+                        anomalies.append(Anomaly(
+                            id=str(uuid.uuid4()),
+                            type=AnomalyType.PARAMETER_SNIFFING,
+                            severity=self._calculate_severity(severity_weight),
+                            root_resource=f"Query {candidate.query_id} ({candidate.plan_count} plans, {candidate.variance_ratio:.1f}x variance)",
+                            context_data=context
+                        ))
+        except Exception as e:
+            pass  # MetricsEngine may not be initialized yet
+
+        # 7. Predictive Query Degradation (trend slope on historical duration)
+        try:
+            from metrics_engine.prediction import compute_trend_slope, compute_ewma
+
+            for q in current_snapshot.expensive_queries:
+                hist_durations: list[float] = []
+                for snap in history:
+                    for old_q in snap.expensive_queries:
+                        if old_q.query_hash == q.query_hash:
+                            hist_durations.append(float(old_q.total_elapsed_time))
+
+                if len(hist_durations) >= settings.PREDICTION_MIN_HISTORY_POINTS:
+                    # Smooth with EWMA first to reduce noise
+                    smoothed = compute_ewma(hist_durations, alpha=0.3)
+                    slope = compute_trend_slope(smoothed)
+
+                    if slope > settings.PREDICTION_SLOPE_THRESHOLD:
+                        # Accelerating = slope of the second half > first half
+                        mid = len(smoothed) // 2
+                        slope_first = compute_trend_slope(smoothed[:mid]) if mid >= 3 else 0
+                        slope_second = compute_trend_slope(smoothed[mid:]) if len(smoothed) - mid >= 3 else slope
+                        is_accelerating = slope_second > slope_first * 1.2
+
+                        severity_weight = 6 if is_accelerating else 4
+
+                        anomalies.append(Anomaly(
+                            id=str(uuid.uuid4()),
+                            type=AnomalyType.PREDICTED_REGRESSION,
+                            severity=self._calculate_severity(severity_weight),
+                            root_resource=f"Query {q.query_hash}",
+                            context_data={
+                                "slope": round(slope, 2),
+                                "slope_first_half": round(slope_first, 2),
+                                "slope_second_half": round(slope_second, 2),
+                                "is_accelerating": is_accelerating,
+                                "history_points": len(hist_durations),
+                                "current_elapsed_time": q.total_elapsed_time,
+                                "sql_text": q.sql_text[:300],
+                                "anomaly_score": severity_weight,
+                            }
+                        ))
+        except Exception as e:
+            pass  # prediction module may not be available
+
         return anomalies
 
 detector = AnomalyDetector()

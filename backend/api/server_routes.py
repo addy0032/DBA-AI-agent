@@ -1,6 +1,7 @@
 """Enterprise observability API routes — domain-specific endpoints."""
 from fastapi import APIRouter
 from metrics_engine.engine import metrics_engine
+from utils.db import list_all_databases, get_active_database, set_active_database
 
 router = APIRouter()
 
@@ -114,3 +115,56 @@ async def configuration_audit():
     return {
         "current": current.model_dump() if current else None,
     }
+
+
+# ── Admin / Control Endpoints ──────────────────────────────────
+
+@router.get("/admin/active-db")
+async def get_active_db():
+    """Return the currently active database name."""
+    return {
+        "database": get_active_database(),
+        "server": "ADDY\\SQLEXPRESS",
+    }
+
+
+@router.get("/admin/databases")
+async def list_databases():
+    """List all user databases on this SQL Server instance."""
+    return {
+        "databases": list_all_databases(),
+        "active": get_active_database(),
+    }
+
+
+@router.post("/admin/switch-db")
+async def switch_database(payload: dict):
+    """Switch the active database and re-collect all metrics."""
+    db_name = payload.get("database", "").strip()
+    if not db_name:
+        return {"error": "database name required"}, 400
+
+    available = list_all_databases()
+    if db_name not in available:
+        return {"error": f"'{db_name}' not found on server", "available": available}
+
+    set_active_database(db_name)
+    metrics_engine.reset_history()
+    metrics_engine.force_refresh_all()
+    return {
+        "success": True,
+        "active": db_name,
+        "message": f"Switched to {db_name} and refreshed all metrics.",
+    }
+
+
+@router.post("/admin/refresh-all")
+async def refresh_all():
+    """Force-refresh all collectors immediately (bypasses polling timers)."""
+    metrics_engine.force_refresh_all()
+    return {
+        "success": True,
+        "database": get_active_database(),
+        "message": "All collectors refreshed.",
+    }
+

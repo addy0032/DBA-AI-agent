@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import {
     LayoutDashboard, MessageSquareCode, Database, Settings,
-    Cpu, MemoryStick, Clock, Workflow, HardDrive,
-    Table2, BarChart3, Server, Brain
+    Cpu, Clock, Workflow, HardDrive,
+    Table2, BarChart3, Server, Brain,
+    RefreshCw, ChevronDown, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { observabilityApi } from "@/services/observabilityApi";
 
 const routes = [
     { label: "Overview", icon: LayoutDashboard, href: "/dashboard", color: "text-sky-500" },
@@ -26,6 +29,46 @@ const routes = [
 
 export function Sidebar() {
     const pathname = usePathname();
+    const [activeDb, setActiveDb] = useState<string>("");
+    const [databases, setDatabases] = useState<string[]>([]);
+    const [showDbPicker, setShowDbPicker] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [switching, setSwitching] = useState(false);
+
+    // Load active DB and database list
+    useEffect(() => {
+        observabilityApi.getActiveDb().then(r => setActiveDb(r.database)).catch(() => { });
+        observabilityApi.listDatabases().then(r => setDatabases(r.databases)).catch(() => { });
+    }, []);
+
+    const handleSwitchDb = useCallback(async (dbName: string) => {
+        if (dbName === activeDb) { setShowDbPicker(false); return; }
+        setSwitching(true);
+        try {
+            await observabilityApi.switchDb(dbName);
+            setActiveDb(dbName);
+            setShowDbPicker(false);
+            // Reload the page to refresh all components
+            window.location.reload();
+        } catch (e) {
+            console.error("DB switch failed:", e);
+        } finally {
+            setSwitching(false);
+        }
+    }, [activeDb]);
+
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await observabilityApi.refreshAll();
+            // Small delay then reload to show new data
+            setTimeout(() => window.location.reload(), 300);
+        } catch (e) {
+            console.error("Refresh failed:", e);
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
 
     return (
         <div className="flex flex-col h-full bg-[#111111] text-white border-r border-[#222]">
@@ -40,8 +83,55 @@ export function Sidebar() {
                 </div>
             </div>
 
+            {/* Database Selector */}
+            <div className="px-3 pt-3 pb-1">
+                <div className="relative">
+                    <button
+                        onClick={() => setShowDbPicker(!showDbPicker)}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] hover:border-[#444] transition text-left"
+                    >
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Database className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" />
+                            <span className="text-xs font-medium text-zinc-200 truncate">{activeDb || "..."}</span>
+                        </div>
+                        <ChevronDown className={cn("w-3.5 h-3.5 text-zinc-500 transition-transform flex-shrink-0", showDbPicker && "rotate-180")} />
+                    </button>
+
+                    {showDbPicker && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-[#0d0d0d] border border-[#333] rounded-lg shadow-2xl z-50 max-h-48 overflow-y-auto">
+                            {databases.map(db => (
+                                <button
+                                    key={db}
+                                    onClick={() => handleSwitchDb(db)}
+                                    disabled={switching}
+                                    className={cn(
+                                        "w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition hover:bg-[#1a1a1a]",
+                                        db === activeDb ? "text-cyan-400" : "text-zinc-400"
+                                    )}
+                                >
+                                    {db === activeDb && <Check className="w-3 h-3 text-cyan-400 flex-shrink-0" />}
+                                    <span className={db === activeDb ? "font-semibold" : "ml-5"}>{db}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Refresh Button */}
+            <div className="px-3 pb-2 pt-1">
+                <button
+                    onClick={handleRefresh}
+                    disabled={refreshing}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-emerald-600/10 border border-emerald-600/20 hover:bg-emerald-600/20 text-emerald-400 text-xs font-medium transition disabled:opacity-50"
+                >
+                    <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+                    {refreshing ? "Refreshing..." : "Refresh All Metrics"}
+                </button>
+            </div>
+
             {/* Navigation */}
-            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
+            <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
                 {routes.map((route, i) => {
                     if ('divider' in route && route.divider) {
                         return <div key={i} className="my-3 border-t border-[#222]" />;
